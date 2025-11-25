@@ -64,7 +64,7 @@ Basic Command Structure :
 1. We launch KrbNixPwn in “monitor” mode and wait patiently for someone to log in. As soon as the victim logs in, their ticket is automatically extracted.
 ![](res/demo_dump.gif)
 
-2. We can perform a pass-the-ticket attack from attacker machine to impersonate the user in Active Directory (e.g with **netexec --use-kcache** option).
+2. We can perform a pass-the-ticket attack from attacker machine to impersonate the user in Active Directory (e.g with **[netexec --use-kcache](https://www.netexec.wiki/getting-started/using-kerberos)** option).
 ![](res/demo_pth.gif)
 
 #### Utils
