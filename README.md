@@ -15,7 +15,7 @@
 
 - [Motivation](#motivation)
 - [Usage](#usage)
-  * [Example](#example)
+  * [Demo](#demo)
   * [Utils](#utils)
 - [Technical Background](#technical-background)
   * [Abstract](#abstract)
@@ -58,13 +58,13 @@ Basic Command Structure :
 - **-o or --output** Specify a custom directory to store extracted .ccache or .keytab artefacts. Default: */tmp/krbnixpwn.*
 - **-v or --verbose** Enable verbose debugging output.
 
-#### Example
+#### Demo
 > Scenario: we have compromised the machine sl001@sevenkingdoms.local. 
 
 1. We launch KrbNixPwn in “monitor” mode and wait patiently for someone to log in. As soon as the victim logs in, their ticket is automatically extracted.
 ![](res/demo_dump.gif)
 
-2. We can perform a pass-the-ticket attack from attacker machine to impersonate the user in Active Directory.
+2. We can perform a pass-the-ticket attack from attacker machine to impersonate the user in Active Directory (e.g with **netexec --use-kcache** option).
 ![](res/demo_pth.gif)
 
 #### Utils
