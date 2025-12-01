@@ -57,6 +57,7 @@ Basic Command Structure :
 - **monitor** Watch for new user logins in real time and attempt extraction when new Kerberos sessions appear.
 - **-o or --output** Specify a custom directory to store extracted .ccache or .keytab artefacts. Default: */tmp/krbnixpwn.*
 - **-v or --verbose** Enable verbose debugging output.
+- **-p or --printout** Displays the ticket content in base64 after saving it (useful when you cannot extract files from the remote machine).
 
 #### Demo
 > Scenario: we have compromised the machine sl001@sevenkingdoms.local. 
