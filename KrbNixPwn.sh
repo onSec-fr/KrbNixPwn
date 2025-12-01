@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # KrbNixPwn - Kerberos ticket extraction tool for Linux
-# version : 1.2
+# version : 1.3
 # Author : https://github.com/onSec-fr
 
 
