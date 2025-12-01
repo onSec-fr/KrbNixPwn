@@ -101,8 +101,8 @@ if [[ -z "$MODE" ]]; then
     exit 1
 fi
 
+# Create output directory
 mkdir -p "$OUTPUT_DIR"
-
 
 # Detect the Kerberos realm configured on the system
 detect_kerberos_realm() {
@@ -127,6 +127,33 @@ detect_cache_method() {
     if [ -n "$line" ]; then
         echo "$line" | awk '{print $3}'
         return
+    fi
+    # If no output, look in krb5 config
+    if [ -f /etc/krb5.conf ]; then
+        cconf=$(awk -F'=' '/^[[:space:]]*default_ccache_name[[:space:]]*=/{ if ($0 !~ /^[[:space:]]*#/) { val=$2; for(i=3;i<=NF;i++) val=val "=" $i; gsub(/^[[:space:]]+|[[:space:]]+$/,"",val); print val; exit } }' /etc/krb5.conf 2>/dev/null || true)
+        if [ -n "$cconf" ]; then
+            # strip surrounding quotes and trim
+            cconf=${cconf#\"}
+            cconf=${cconf%\"}
+            cconf=$(printf "%s" "$cconf" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            # expand %U and %u to uid
+            cpath=${cconf//%U/$uid}
+            cpath=${cpath//%u/$uid}
+            # handle DIR: and FILE:
+            if [[ "$cpath" =~ ^DIR:(.*) ]]; then
+                p="${BASH_REMATCH[1]}"
+                if [ -d "$p" ]; then
+                    echo "DIR:$p"
+                    return
+                fi
+            elif [[ "$cpath" =~ ^FILE:(.*) ]]; then
+                p="${BASH_REMATCH[1]}"
+                if [ -f "$p" ]; then
+                    echo "FILE:$p"
+                    return
+                fi
+            fi
+        fi
     fi
     # If no output, search for ccache files in known locations
     for d in /tmp/krb5cc_"$uid"*; do
@@ -267,6 +294,11 @@ dump_kcm() {
     local user="$1"
     LDB_FILE_SRC="/var/lib/sss/secrets/secrets.ldb"
     LDB_FILE="$OUTPUT_DIR/secrets.ldb.copy"
+    # If SSSD uses an mkey file, the secrets LDB is encrypted and not supported at the moment
+    if [ -f "/var/lib/sss/secrets/.secrets.mkey" ]; then
+        print_msg WARN "Encrypted KCM databases detected (file /var/lib/sss/secrets/.secrets.mkey present). Encrypted KCM databases are not currently supported. You can use: https://github.com/mandiant/SSSDKCMExtractor to decrypt it manually."
+        return 4
+    fi
     if [ ! -f "$LDB_FILE_SRC" ]; then
         print_msg ERROR "LDB source file not found: $LDB_FILE_SRC"
         return 3
@@ -481,8 +513,29 @@ dump_kcm() {
                 rm -f "$bf"
             done
             
-            # Extract realm from the generated ccache file
-            realm=$(klist -c "FILE:$tmpfile" 2>/dev/null | awk '/Default principal:/ {print $3}' | awk -F'@' '{print toupper($2)}')
+            # Extract realm (and ticket expiry) from the generated ccache file
+            klist_out=$(klist -c "FILE:$tmpfile" 2>/dev/null || true)
+            realm=$(printf "%s" "$klist_out" | awk '/Default principal:/ {print $3}' | awk -F'@' '{print toupper($2)}')
+
+            # Parse the first ticket line after the header 'Valid starting' to get expiry
+            expires_line=$(printf "%s
+" "$klist_out" | awk '/Valid starting/ {found=1; next} found && NF {print; exit}')
+            if [ -n "$expires_line" ]; then
+                # typical ticket line: <date1> <time1> <date2> <time2> <service-principal>
+                expires_field=$(printf "%s" "$expires_line" | awk '{print $3" "$4}')
+                print_msg DEBUG "Ticket Expires: $expires_field"
+                expires_epoch=$(date -d "$expires_field" +%s 2>/dev/null || true)
+                if [ -n "$expires_epoch" ]; then
+                    now_epoch=$(date +%s)
+                    if [ "$expires_epoch" -le "$now_epoch" ]; then
+                        print_msg INFO "Ticket for ${user_short:-unknown} is expired (Expires: $expires_field). SKIPPING."
+                        continue
+                    fi
+                else
+                    print_msg WARN "Could not parse expiry date: $expires_field"
+                fi
+            fi
+
             if [ -z "$realm" ]; then
                 print_msg WARN "Could not extract realm for $user from $tmpfile"
                 rm -f "$tmpfile" || true
