@@ -4,17 +4,18 @@
 > **KrbNixPwn is a all-in-one Kerberos ticket extraction framework designed to support red-team operations across diverse Linux enterprise environments.** Its purpose is to simplify data collection from heterogeneous Kerberos cache backends (FILE, DIR, KCM, KEYRING) while mitigating the operational friction typically associated with legacy or single-purpose tools.
 
 #### TL;DR — Using KrbNixPwn
-**Dump all Kerberos tickets and keytab files on the machine (requires root privileges):**
+**Search for and dump all Kerberos tickets on the machine (requires root privileges):**
 
     ./KrbNixPwn.sh dump
     
-**Monitor and automatically dump Kerberos tickets from new user sessions (requires root privileges):**
+**Monitor and automatically dump Kerberos tickets from current and subsequent user sessions (requires root privileges):**
 
     ./KrbNixPwn.sh monitor
 ------------
 
 - [Motivation](#motivation)
 - [Usage](#usage)
+  * [Options](#options)
   * [Demo](#demo)
   * [Utils](#utils)
 - [Technical Background](#technical-background)
@@ -47,6 +48,7 @@ Linux systems are increasingly required to participate in enterprise identity ma
 KrbNixPwn is provided strictly for **educational**, **research**, and **authorized security testing** purposes.
 Unauthorized use of this tool against systems you do not own or do not have explicit permission to test is illegal.
 
+#### Options
 > KrbNixPwn provides two operational modes — **dump** and **monitor**.
 
 Basic Command Structure : 
@@ -58,6 +60,18 @@ Basic Command Structure :
 - **-o or --output** Specify a custom directory to store extracted .ccache or .keytab artefacts. Default: */tmp/krbnixpwn.*
 - **-v or --verbose** Enable verbose debugging output.
 - **-p or --printout** Displays the ticket content in base64 after saving it (useful when you cannot extract files from the remote machine).
+
+#### Prerequisites
+**You must run the script as root (or with a sudo user)** - KrbNixPwn needs access to Kerberos caches, keyrings, and SSSD internal files belonging to other users.
+These resources are only readable by the root user.
+
+**The script relies on common, standard Linux utilities** - Note that all major enterprise Linux distributions (Ubuntu, Debian, RHEL, Fedora, SUSE) include all of these binaries by default when joined to a domain.
+- bash
+- klist
+- awk/sed/grep
+- su/sudo
+- keyctl (if KEYRING caching mode)
+- hexdump or od or perl (falls back automatically if missing)
 
 #### Demo
 > Scenario: we have compromised the machine sl001@sevenkingdoms.local. 
