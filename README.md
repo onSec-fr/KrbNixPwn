@@ -29,7 +29,7 @@
     + [KCM (Kerberos Cache Manager)](#kcm-kerberos-cache-manager)
     + [KEYRING Cache](#keyring-cache)
   * [Security Implications](#security-implications)
-- [Playground: Integrating Linux machine into GOAD](#playground-integrating-linux-machine-into-goad-active-directory)
+- [Playground: Integrating Linux machine into GOAD](#playground)
 - [References](#references)
 
 ### Motivation
@@ -42,6 +42,8 @@ Linux systems are increasingly required to participate in enterprise identity ma
 - **Unified toolchain** supporting all major cache backends.
 - **Zero-to-minimal dependencies** through pure Bash + coreutils.
 - **Monitoring mode** for long-term persistence and automatic extraction of new Kerberos sessions (like [Rubeus monitor](https://github.com/GhostPack/Rubeus?tab=readme-ov-file#monitor "Rubeus monitor")).
+
+<br>
 
 ### Usage
 #### Disclaimer
@@ -92,6 +94,8 @@ Usage : `./utils/describe_tickets.sh /path/to/ccache_dir`
 > **ssh_kerberos_exec.sh** executes SSH commands on multiple hosts using Kerberos authentication (GSSAPI) without relying on passwords. Ideal for post-extraction testing where a valid ticket is available.  
 
 Usage : `./utils/ssh_kerberos_exec.sh -f <hostfile> -u <user@domain.com> -c "<command>"`
+
+<br>
 
 ### Technical Background
 #### Abstract
@@ -157,8 +161,8 @@ With root access, **Kerberos tickets cached by any user can be extracted**. Unli
 **KrbNixPwn automates all of these workflows, handling each cache backend transparently and without operator intervention.**
 
 **Cross-platform attacks : Linux ↔ Windows**
-Kerberos on Linux (MIT Kerberos) uses ccache files, while Windows uses kcache / kirbi formats.  
-Despite this difference, the actual Kerberos ticket data (encrypted TGT/TGS blobs) are compatible.
+- Kerberos on Linux (MIT Kerberos) uses ccache files, while Windows uses kcache / kirbi formats.  
+- Despite this difference, the actual Kerberos ticket data (encrypted TGT/TGS blobs) are compatible.
 
 A Linux-dumped ticket can be:
 1. Extracted from FILE/DIR/KCM/KEYRING.
@@ -167,8 +171,21 @@ A Linux-dumped ticket can be:
 
 **Thus, Linux-side Kerberos compromise directly enables Windows lateral movement.** The opposite is also possible if GSSAPIAuthentication is enabled in sshd.
 
-#### Playground: Integrating Linux machine into GOAD (Active Directory)
-> This section demonstrates how to integrate a Debian 12 machine into the great [GOAD](https://github.com/Orange-Cyberdefense/GOAD "GOAD") lab. 
+<br>
+
+#### Playground
+**This section demonstrates how to integrate a Linux machine into the great [GOAD](https://github.com/Orange-Cyberdefense/GOAD "GOAD") lab.**
+
+##### Option 1 - Use GOAD Lab lx01 extension
+GOAD provides a Linux host extension — lx01 — which automates the deployment and domain join process: https://orange-cyberdefense.github.io/GOAD/extensions/lx01/
+> This is the easiest and cleanest way to add add a linux ubuntu 22.4 to the lab GOAD or GOAD Light in the domain sevenkingdoms.local.
+
+##### Option 2 - Manual integration into GOAD Lab
+
+> The manual procedure is good for users who want to understand the underlying steps and how the different components work (SSSD, realmd, Kerberos, DNS, system configuration, etc.).
+This approach is valuable if you want to learn what happens behind the scenes, troubleshoot issues, or adapt the setup to other environments.
+
+**The manual procedure below is based on Debian 12, as it provides a clean and stable baseline for AD integration with SSSD/realmd. Other distributions may require adjustments.**
 
 1. Before joining the domain, ensure your machine has a proper hostname and FQDN : `sudo hostnamectl set-hostname <machine_name.sevenkingdoms.local>`
 
@@ -245,6 +262,8 @@ You can now login with `ssh stannis.baratheon@sevenkingdoms.local@<linux_machine
 - Modify Kerberos cache methods : edit `/etc/krb5.conf`, uncomment one of the *default_ccache_name* line then restart `systemctl restart sssd`.
 - You can limit which AD users or groups can login using `sudo realm permit "Domain Users" `.
 - You can restrinct sudo access via SSSD by creating rules in **/etc/sudoers.d/sssd**.
+
+<br>
 
 #### References
 This research and development would have been much more difficult without the involvement of the community :
