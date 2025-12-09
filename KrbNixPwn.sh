@@ -599,7 +599,7 @@ dump_kcm() {
             local base="$(sanitize_name "${user_short}")_$(sanitize_name "${realm}")"
             outfile=$(next_outfile "$base" ".ccache")
             if mv -- "$tmpfile" "$outfile" 2>/dev/null; then
-                print_msg SUCCESS "Dumped $user ccache -> $outfile"
+                print_msg SUCCESS "Dumped $user_short ccache from KCM -> $outfile"
                 show_base64 "$outfile"
             else
                 print_msg ERROR "Failed to move $tmpfile -> $outfile"
@@ -694,7 +694,7 @@ dump_keyring() {
     
     # Write binary ccache file
     hex_to_bin "$HEX" > "$outfile"
-    print_msg SUCCESS "Dumped $user ccache -> $outfile"
+    print_msg SUCCESS "Dumped $user ccache from KEYRING -> $outfile"
     show_base64 "$outfile"
     
     return 0
