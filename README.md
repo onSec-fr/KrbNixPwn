@@ -57,11 +57,12 @@ Basic Command Structure :
 
     ./krbnixpwn.sh [dump|monitor] [-o output_dir] [--verbose] [--help]
 
-- **dump** Perform a full sweep of the system for Kerberos caches (FILE, DIR, KCM, KEYRING) and extract all identifiable credentials and keytabs.
+- **dump** Search through typical Kerberos cache locations (FILE, DIR, KCM, KEYRING) and retrieve all identifiable credentials and keytabs.
 - **monitor** Watch for new user logins in real time and attempt extraction when new Kerberos sessions appear.
 - **-o or --output** Specify a custom directory to store extracted .ccache or .keytab artefacts. Default: */tmp/krbnixpwn.*
 - **-v or --verbose** Enable verbose debugging output.
 - **-p or --printout** Displays the ticket content in base64 after saving it (useful when you cannot extract files from the remote machine).
+- **-r or --runfor** Specifies a timeout after which the script terminates itself in monitor mode (note that it does not clean up output files).
 
 #### Prerequisites
 **You must run the script as root (or with a sudo user)** - KrbNixPwn needs access to Kerberos caches, keyrings, and SSSD internal files belonging to other users.
