@@ -1,7 +1,7 @@
 ![](res/krbnixpwn_small.png)
 #### A Native Bash Framework for Kerberos Ticket Extraction on Linux
 
-> **KrbNixPwn is a all-in-one Kerberos ticket extraction framework designed to support red-team operations across diverse Linux enterprise environments.** Its purpose is to simplify data collection from heterogeneous Kerberos cache backends (FILE, DIR, KCM, KEYRING) while mitigating the operational friction typically associated with legacy or single-purpose tools.
+> **KrbNixPwn is an all-in-one Kerberos ticket extraction framework designed to support red-team operations across diverse Linux enterprise environments.** Its purpose is to simplify data collection from heterogeneous Kerberos cache backends (FILE, DIR, KCM, KEYRING) while mitigating the operational friction typically associated with legacy or single-purpose tools.
 
 #### TL;DR — Using KrbNixPwn
 **Search for and dump all Kerberos tickets on the machine (requires root privileges):**
@@ -53,16 +53,17 @@ Unauthorized use of this tool against systems you do not own or do not have expl
 #### Options
 > KrbNixPwn provides two operational modes — **dump** and **monitor**.
 
-Basic Command Structure : 
+Basic Command Structure :
 
-    ./krbnixpwn.sh [dump|monitor] [-o output_dir] [--verbose] [--help]
+    ./KrbNixPwn.sh [dump|monitor] [-o output_dir] [-v|--verbose] [-p|--printout] [-r|--runfor seconds] [-h|--help]
 
 - **dump** Search through typical Kerberos cache locations (FILE, DIR, KCM, KEYRING) and retrieve all identifiable credentials and keytabs.
 - **monitor** Watch for new user logins in real time and attempt extraction when new Kerberos sessions appear.
 - **-o or --output** Specify a custom directory to store extracted .ccache or .keytab artefacts. Default: */tmp/krbnixpwn.*
 - **-v or --verbose** Enable verbose debugging output.
 - **-p or --printout** Displays the ticket content in base64 after saving it (useful when you cannot extract files from the remote machine).
-- **-r or --runfor** Specifies a timeout after which the script terminates itself in monitor mode (note that it does not clean up output files).
+- **-r or --runfor \<seconds\>** Specifies a timeout (in seconds) after which the script terminates itself in monitor mode (does not clean up output files).
+- **-h or --help** Show this usage message and exit.
 
 #### Prerequisites
 **You must run the script as root (or with a sudo user)** - KrbNixPwn needs access to Kerberos caches, keyrings, and SSSD internal files belonging to other users.
@@ -75,6 +76,7 @@ These resources are only readable by the root user.
 - su/sudo
 - keyctl (if KEYRING caching mode)
 - hexdump or od or perl (falls back automatically if missing)
+- journalctl (systemd — required for monitor mode to detect new logins)
 
 #### Demo
 > Scenario: we have compromised the machine sl001@sevenkingdoms.local. 
@@ -163,7 +165,7 @@ With root access, **Kerberos tickets cached by any user can be extracted**. Unli
 
 **Cross-platform attacks : Linux ↔ Windows**
 - Kerberos on Linux (MIT Kerberos) uses ccache files, while Windows uses kcache / kirbi formats.  
-- Despite this difference, the actual Kerberos ticket data (encrypted TGT/TGS blobs) are compatible.
+- Despite this difference, the actual Kerberos ticket data (encrypted TGT/ST blobs) are compatible.
 
 A Linux-dumped ticket can be:
 1. Extracted from FILE/DIR/KCM/KEYRING.
@@ -250,7 +252,7 @@ This approach is valuable if you want to learn what happens behind the scenes, t
      .sevenkingdoms.local = SEVENKINGDOMS.LOCAL
      sevenkingdoms.local = SEVENKINGDOMS.LOCAL
 
-10. Test SSH login with AD credentials
+10. Test SSH login with AD credentials  
 You can now login with `ssh stannis.baratheon@sevenkingdoms.local@<linux_machine>`
 - Enter the user password from AD (*Drag0nst0ne*).
 - Successful login confirms both Kerberos and SSSD integration.
@@ -258,7 +260,7 @@ You can now login with `ssh stannis.baratheon@sevenkingdoms.local@<linux_machine
 
 ![](res/lab_2.png)
 
-11. Play with configuration
+11. Play with configuration  
 **Once your Debian machine is integrated into the domain, you can customize authentication behavior and ticket caching, as well as restrict login and sudo access.**
 - Modify Kerberos cache methods : edit `/etc/krb5.conf`, uncomment one of the *default_ccache_name* line then restart `systemctl restart sssd`.
 - You can limit which AD users or groups can login using `sudo realm permit "Domain Users" `.

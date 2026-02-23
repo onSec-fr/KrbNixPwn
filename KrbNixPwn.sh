@@ -27,10 +27,10 @@ print_msg() {
         return
     fi
     case "$level" in
-        DEBUG)   echo -e "[DEBUG] [$timestamp] $msg" ;;
+        DEBUG)   echo -e "[DEBUG] [$timestamp] $msg" >&2 ;;
         INFO)    echo -e "\e[34m[INFO] [$timestamp] $msg\e[0m" ;;
-        WARN)    echo -e "\e[33m[WARN] [$timestamp] $msg\e[0m" ;;
-        ERROR)   echo -e "\e[31m[ERROR] [$timestamp] $msg\e[0m" ;;
+        WARN)    echo -e "\e[33m[WARN] [$timestamp] $msg\e[0m" >&2 ;;
+        ERROR)   echo -e "\e[31m[ERROR] [$timestamp] $msg\e[0m" >&2 ;;
         SUCCESS) echo -e "\e[32m[SUCCESS] [$timestamp] $msg\e[0m" ;;
         PRINTOUT)    echo -e "\e[35m[PRINTOUT] [$timestamp] $msg\e[0m" ;;
         *)       echo "$msg" ;;
@@ -144,8 +144,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$MODE" ]]; then
-    echo -e "\e[31m[ERROR] You must specify a mode: dump or monitor\e[0m"
-    echo "Usage: $0 [dump|monitor] [-o output_dir] [-verbose]"
+    print_msg ERROR "You must specify a mode: dump or monitor"
+    print_usage
+    exit 1
+fi
+
+if [[ -n "$RUNFOR" && "$RUNFOR" != "0" ]] && ! [[ "$RUNFOR" =~ ^[0-9]+$ ]]; then
+    print_msg ERROR "--runfor requires a positive integer (seconds)"
     exit 1
 fi
 
@@ -190,6 +195,7 @@ detect_cache_method() {
     fi
     # If no output, look in krb5 config
     if [ -f /etc/krb5.conf ]; then
+        local cconf cpath
         cconf=$(awk -F'=' '/^[[:space:]]*default_ccache_name[[:space:]]*=/{ if ($0 !~ /^[[:space:]]*#/) { val=$2; for(i=3;i<=NF;i++) val=val "=" $i; gsub(/^[[:space:]]+|[[:space:]]+$/,"",val); print val; exit } }' /etc/krb5.conf 2>/dev/null || true)
         if [ -n "$cconf" ]; then
             # strip surrounding quotes and trim
@@ -511,13 +517,13 @@ dump_kcm() {
                 cur=$((cur + plen))
                 principals+=("$pstr")
             done
-            $([ "$ok" = true ]) || continue
+            [ "$ok" = true ] || continue
             
             # Read credentials count
             if ! creds_len=$(read_le32 "$LDB_FILE" "$cur" 2>/dev/null); then continue; fi
             cur=$((cur + 4))
             if [ "$creds_len" -lt 1 ] || [ "$creds_len" -gt 1024 ]; then
-                :
+                continue
             fi
             
             creds_files=(); valid=true
@@ -533,7 +539,7 @@ dump_kcm() {
                 cur=$((cur + blob_len))
                 creds_files+=("$tmpb")
             done
-            $([ "$valid" = true ]) || { for f in "${creds_files[@]:-}"; do rm -f "$f"; done; continue; }
+            [ "$valid" = true ] || { for f in "${creds_files[@]:-}"; do rm -f "$f"; done; continue; }
             
             # Construct ccache-like file for the first matching principal
             safe_pr=$(sanitize_name "${principals[0]:-unknown}")
@@ -628,11 +634,7 @@ dump_keyring() {
     local user="$1"
     local uid
     uid=$(id -u "$user")
-    
-    local TMPDIR
-    TMPDIR="$(mktemp -d)"
-    trap 'rm -rf "$TMPDIR"' EXIT
-    
+
     print_msg DEBUG "[KEYRING] Extracting keyring for user='$user' (uid=$uid)"
     
     # Get persistent keyring ID for the user
